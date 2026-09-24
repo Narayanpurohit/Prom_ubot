@@ -1,0 +1,118 @@
+                         USER
+                          │
+                          ▼
+                   Link Message
+                          │
+                          │
+                ┌─────────┴─────────┐
+                │                   │
+          user_msg_id          link extract
+                │                   │
+                └─────────┬─────────┘
+                          ▼
+                 Basic Link Validation
+                          │
+                          ▼
+              ┌───────────────────────┐
+              │ Ignored Domain?       │
+              │ is_ignored_domain()   │
+              └──────────┬────────────┘
+                         │
+                  ┌──────┴──────┐
+                  │             │
+                 YES            NO
+                  │             │
+                  ▼             ▼
+               Reject       Continue
+                                │
+                                ▼
+                   Processing Message Send
+                                │
+                                ▼
+                         processing_msg_id
+                                │
+                                ▼
+                    Save Request Information
+                                │
+                    ┌───────────┴───────────┐
+                    │                       │
+                  link                  user_id
+                    │                       │
+             user_msg_id             processing_msg_id
+                    │
+                    └───────────┬───────────┘
+                                ▼
+                       Check Link State
+                                │
+             ┌──────────────────┼──────────────────┐
+             │                  │                  │
+           SAVED            PROCESSING            NEW
+             │                  │                  │
+             ▼                  ▼                  ▼
+       Existing Result     Join Existing       CLAIM LINK
+             │                  │                  │
+             │                  │                  ▼
+             │                  │            Bypass Engine
+             │                  │                  │
+             │                  │           ┌──────┴──────┐
+             │                  │           │             │
+             │                  │        SUCCESS        FAIL
+             │                  │           │             │
+             │                  │           ▼             ▼
+             │                  │       Save Result     Save Error
+             │                  │           │             │
+             └──────────┬───────┴───────────┴─────────────┘
+                        │
+                        ▼
+                 Get All Waiting Users
+                        │
+                        ▼
+              ┌──────────────────────┐
+              │ For Each User:       │
+              │                      │
+              │ Delete processing    │
+              │ message              │
+              │         ↓            │
+              │ Reply to ORIGINAL    │
+              │ user message         │
+              │         ↓            │
+              │ Send Result/Error    │
+              └──────────┬───────────┘
+                         │
+                         ▼
+                  Update Statistics
+
+
+USER SEND LINK
+      ↓
+Extract Link
+      ↓
+Validate Link
+      ↓
+Check Saved Bypass
+      │
+      ├── FOUND
+      │      ↓
+      │   Saved Result
+      │      ↓
+      │   Continue Process
+      │      ↓
+      │   User Result
+      │      ↓
+      │   User Statistics
+      │
+      └── NOT FOUND
+             ↓
+       Check Processing
+             │
+             ├── FOUND
+             │      ↓
+             │   Add User
+             │      ↓
+             │   Process Continue
+             │
+             └── NEW
+                    ↓
+                  Claim
+                    ↓
+              Process Continue
