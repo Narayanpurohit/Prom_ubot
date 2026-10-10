@@ -33,7 +33,6 @@ def register(client, db, x_chat):
             {
                 "$set": {
                     "user_id": user_id,
-                    "peer_id": peer_id,
                     "source_chat": str(x_chat),
                     "status": "pending",
                     "updated_at": now,
@@ -43,7 +42,7 @@ def register(client, db, x_chat):
             upsert=True,
         )
 
-        # Keep one peer_bot record per userbot account.
+        # Store the userbot ID, user IDs, and resolved peer IDs in peer_bot.
         me = await client.get_me()
         if not me:
             return
@@ -53,7 +52,10 @@ def register(client, db, x_chat):
             {"_id": bot_id},
             {
                 "$setOnInsert": {"bot_id": bot_id},
-                "$addToSet": {"user_ids": {"$each": [bot_id, user_id]}},
+                "$addToSet": {
+                    "user_ids": {"$each": [bot_id, user_id]},
+                    "peer_ids": peer_id,
+                },
             },
             upsert=True,
         )
