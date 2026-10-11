@@ -1,4 +1,5 @@
-"""Main entry point: starts every configured Telegram user session."""
+"""Main entry point: starts each configured Telegram user session with its own plugin."""
+
 import asyncio
 import logging
 
@@ -7,7 +8,10 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 import config
-from Plugins.userbot import register as register_userbot_plugin
+from Plugins.userbot1 import register as register_userbot1
+from Plugins.userbot2 import register as register_userbot2
+from Plugins.userbot3 import register as register_userbot3
+from Plugins.userbot4 import register as register_userbot4
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +30,7 @@ def parse_chat(value):
         return value
 
 
-async def run_session(session_name, session_string, db, x_chat):
+async def run_session(session_name, session_string, plugin, db, x_chat):
     client = TelegramClient(
         StringSession(session_string),
         int(config.API_ID),
@@ -38,7 +42,7 @@ async def run_session(session_name, session_string, db, x_chat):
     if not me:
         raise RuntimeError(f"{session_name}: Telegram did not return an account")
 
-    register_userbot_plugin(client, db, x_chat)
+    plugin(client, db, x_chat)
     log.info("%s started as @%s (user ID %s)", session_name, me.username, me.id)
 
     try:
@@ -54,12 +58,16 @@ async def main():
         raise ValueError("Set MONGO_URI in config.py")
 
     sessions = [
-        ("String1", config.STRING1),
-        ("String2", config.STRING2),
-        ("String3", config.STRING3),
-        ("String4", config.STRING4),
+        ("String1", config.STRING1, register_userbot1),
+        ("String2", config.STRING2, register_userbot2),
+        ("String3", config.STRING3, register_userbot3),
+        ("String4", config.STRING4, register_userbot4),
     ]
-    sessions = [(name, value.strip()) for name, value in sessions if value and value.strip()]
+    sessions = [
+        (name, value.strip(), plugin)
+        for name, value, plugin in sessions
+        if value and value.strip()
+    ]
     if not sessions:
         raise ValueError("Add at least one valid session string (STRING1–STRING4) in config.py")
 
@@ -69,12 +77,15 @@ async def main():
 
     try:
         results = await asyncio.gather(
-            *(run_session(name, session, db, x_chat) for name, session in sessions),
+            *(
+                run_session(name, session, plugin, db, x_chat)
+                for name, session, plugin in sessions
+            ),
             return_exceptions=True,
         )
         failures = [result for result in results if isinstance(result, BaseException)]
         for failure in failures:
-            log.exception("A userbot session stopped with an error", exc_info=failure)
+            log.error("A userbot session stopped with an error: %s", failure)
         if failures:
             raise RuntimeError(f"{len(failures)} userbot session(s) failed to start or stopped")
     finally:
