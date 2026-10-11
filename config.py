@@ -17,5 +17,14 @@ X_CHAT = ""
 MONGO_URI = ""
 DB_NAME = "prom_ubot"
 
+# Permission messages for /subscribe and /stop.
+NS1 = ""
+NS2 = ""
+NS3 = ""
+NS4 = ""
+NS5 = ""
+NS6 = ""
+NS7 = ""
+
 # Telegram numeric user IDs allowed to run owner-only commands.
 OWNERS_ID = []
