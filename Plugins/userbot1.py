@@ -1,4 +1,4 @@
-"Group listener for userbot session 1."
+"""Group listener for userbot session 1."""
 from telethon import events, utils
 
 
