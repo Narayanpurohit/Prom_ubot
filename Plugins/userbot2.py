@@ -115,7 +115,6 @@ def register(client, db, support_chat_id, log_chat_id):
 
     @client.on(
         events.NewMessage(
-            chats=support_chat_id,
             pattern=r"^/process(?:@\w+)?$",
         )
     )
