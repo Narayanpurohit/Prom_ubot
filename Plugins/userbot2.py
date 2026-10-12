@@ -11,8 +11,8 @@ from Plugins.function import (
 # USERBOT 2 SETTINGS
 # =====================================
 
-COLLECTION1 = "collection1"
-COLLECTION2 = "collection2"
+COLLECTION1 = "002"
+COLLECTION2 = "012"
 
 P_MSG = (
     "🚀 Process Started!\n\n"
