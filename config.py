@@ -38,11 +38,11 @@ MONGO_DB_NAME = os.getenv(
 # =====================================
 
 SUPPORT_CHAT_ID = int(
-    os.getenv("SUPPORT_CHAT_ID", "-1001234567890")
+    os.getenv("SUPPORT_CHAT_ID", "-1002673539918")
 )
 
 LOG_CHAT_ID = int(
-    os.getenv("LOG_CHAT_ID", "-1001234567890")
+    os.getenv("LOG_CHAT_ID", "5597521952")
 )
 
 
