@@ -1,100 +1,136 @@
-"""Group listener and consent-based messaging for userbot session 1."""
 import asyncio
-import random
 
-from telethon import events, utils
+from telethon import events
+
+from Plugins.function import (
+    is_user_in_collection,
+    add_user_to_collection,
+    process_users,
+)
+
+# =====================================
+# USERBOT 1 SETTINGS
+# =====================================
+
+COLLECTION1 = "collection1"
+COLLECTION2 = "collection2"
+
+P_MSG = (
+    "🚀 Process Started!\n\n"
+    "User processing has started successfully."
+)
 
 
-def register(client, db, x_chat):
-    peer_bots = db["peer_bot"]
-    users = db["users"]
+def register(client, db, support_chat_id, log_chat_id):
 
-    async def own_bot_id():
-        me = await client.get_me()
-        return int(me.id) if me else None
+    collection1 = db[COLLECTION1]
+    collection2 = db[COLLECTION2]
 
-    @client.on(events.NewMessage(chats=x_chat, incoming=True))
-    async def handle_group_message(event):
-        sender = await event.get_sender()
-        if not sender or getattr(sender, "bot", False) or not getattr(sender, "id", None):
+    @client.on(events.NewMessage(chats=support_chat_id))
+    async def monitor_support_group(event):
+
+        if not event.is_group:
             return
 
-        user_id = int(sender.id)
         try:
-            input_sender = await event.get_input_sender()
-            if not input_sender:
+            sender = await event.get_sender()
+
+            if sender is None:
                 return
-            peer_id = int(utils.get_peer_id(input_sender))
-        except Exception:
-            return
 
-        bot_id = await own_bot_id()
-        if not bot_id:
-            return
+            # Ignore bot accounts.
+            if getattr(sender, "bot", False):
+                return
 
-        await peer_bots.update_one(
-            {"_id": bot_id},
-            {
-                "$setOnInsert": {"bot_id": bot_id},
-                "$addToSet": {
-                    "user_ids": {"$each": [bot_id, user_id]},
-                    "peer_ids": peer_id,
-                },
-            },
-            upsert=True,
+            user_id = sender.id
+
+            if not isinstance(user_id, int) or user_id <= 0:
+                return
+
+            # Ignore users already in either collection.
+            if await is_user_in_collection(collection1, user_id):
+                return
+
+            if await is_user_in_collection(collection2, user_id):
+                return
+
+            # Try resolving the input peer.
+            await client.get_input_entity(user_id)
+
+            await add_user_to_collection(
+                collection1,
+                user_id
+            )
+
+            print(
+                f"[Userbot 1] User {user_id} processed."
+            )
+
+        except Exception as error:
+
+            await send_error_log(
+                client,
+                log_chat_id,
+                "Userbot 1",
+                error,
+                event.id
+            )
+
+    @client.on(events.NewMessage(
+        chats=support_chat_id,
+        pattern=r"^/process(?:@\w+)?$"
+    ))
+    async def process_command(event):
+
+        try:
+            # Only allow commands from group admins.
+            permissions = await event.get_permissions(
+                event.chat_id,
+                event.sender_id
+            )
+
+            if not (
+                permissions.is_admin
+                or permissions.is_creator
+            ):
+                return
+
+            await process_users(
+                client=client,
+                collection1=collection1,
+                collection2=collection2,
+                p_msg=P_MSG,
+                log_chat_id=log_chat_id,
+                bot_name="Userbot 1",
+            )
+
+        except Exception as error:
+
+            await send_error_log(
+                client,
+                log_chat_id,
+                "Userbot 1",
+                error,
+                event.id
+            )
+
+
+async def send_error_log(
+    client,
+    log_chat_id,
+    bot_name,
+    error,
+    message_id=None
+):
+    try:
+        await client.send_message(
+            log_chat_id,
+            (
+                f"⚠️ {bot_name} ERROR\n\n"
+                f"Type: {type(error).__name__}\n"
+                f"Details: {error}\n"
+                f"Message ID: {message_id}"
+            )
         )
-
-    @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private, pattern=r"^/subscribe(?:@\w+)?$"))
-    async def subscribe(event):
-        user_id = int(event.sender_id)
-        bot_id = await own_bot_id()
-        if not bot_id or user_id == bot_id:
-            return
-        await users.update_one(
-            {"bot_id": bot_id, "user_id": user_id},
-            {"$set": {"bot_id": bot_id, "user_id": user_id, "subscribed": True}},
-            upsert=True,
-        )
-        await event.reply("You’re subscribed. Reply /stop any time to stop receiving messages.")
-
-    @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private, pattern=r"^/stop(?:@\w+)?$"))
-    async def unsubscribe(event):
-        user_id = int(event.sender_id)
-        bot_id = await own_bot_id()
-        if not bot_id:
-            return
-        result = await users.delete_one({"bot_id": bot_id, "user_id": user_id})
-        if result.deleted_count:
-            await event.reply("You’ve been unsubscribed. No further broadcasts will be sent.")
-        else:
-            await event.reply("You weren’t subscribed; no broadcast messages will be sent.")
-
-    @client.on(events.NewMessage(outgoing=True, pattern=r"^/broadcast(?:@\w+)?$"))
-    async def broadcast(event):
-        bot_id = await own_bot_id()
-        if not bot_id:
-            return
-        import config
-
-        if bot_id not in {int(owner_id) for owner_id in config.OWNERS_ID}:
-            await event.reply("This command is restricted to configured owners.")
-            return
-
-        source = await event.get_reply_message()
-        if not source:
-            await event.reply("Reply to a message with /broadcast to send it to subscribed users.")
-            return
-
-        cursor = users.find({"bot_id": bot_id, "subscribed": True}, {"user_id": 1})
-        user_ids = [int(doc["user_id"]) async for doc in cursor if doc.get("user_id")]
-        sent = 0
-        failed = 0
-        for user_id in user_ids:
-            try:
-                await client.forward_messages(user_id, source)
-                sent += 1
-            except Exception:
-                failed += 1
-            if user_id != user_ids[-1]:
-                await asyncio.sleep(random.uniform(2, 20))
-        await event.reply(f"Broadcast finished. Sent: {sent}; failed: {failed}.")
+    except Exception as log_error:
+        print(f"[Logging Error] {log_error}")
