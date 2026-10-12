@@ -1,99 +1,120 @@
-"""Main entry point: starts each configured Telegram user session with its own plugin."""
-
 import asyncio
-import logging
 
-from motor.motor_asyncio import AsyncIOMotorClient
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import config
-from Plugins.userbot1 import register as register_userbot1
-from Plugins.userbot2 import register as register_userbot2
-from Plugins.userbot3 import register as register_userbot3
-from Plugins.userbot4 import register as register_userbot4
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-log = logging.getLogger("prom_ubot")
-
-
-def parse_chat(value):
-    value = str(value).strip()
-    if not value:
-        raise ValueError("X_CHAT is missing in config.py")
-    try:
-        return int(value)
-    except ValueError:
-        return value
-
-
-async def run_session(session_name, session_string, plugin, db, x_chat):
-    client = TelegramClient(
-        StringSession(session_string),
-        int(config.API_ID),
-        config.API_HASH,
-    )
-
-    await client.start()
-    me = await client.get_me()
-    if not me:
-        raise RuntimeError(f"{session_name}: Telegram did not return an account")
-
-    plugin(client, db, x_chat)
-    log.info("%s started as @%s (user ID %s)", session_name, me.username, me.id)
-
-    try:
-        await client.run_until_disconnected()
-    finally:
-        await client.disconnect()
+from Plugins import userbot1, userbot2
 
 
 async def main():
-    if not config.API_ID or not config.API_HASH:
-        raise ValueError("Set API_ID and API_HASH in config.py")
-    if not config.MONGO_URI:
-        raise ValueError("Set MONGO_URI in config.py")
+    # =====================================
+    # MONGODB CONNECTION
+    # =====================================
 
-    sessions = [
-        ("String1", config.STRING1, register_userbot1),
-        ("String2", config.STRING2, register_userbot2),
-        ("String3", config.STRING3, register_userbot3),
-        ("String4", config.STRING4, register_userbot4),
-    ]
-    sessions = [
-        (name, value.strip(), plugin)
-        for name, value, plugin in sessions
-        if value and value.strip()
-    ]
-    if not sessions:
-        raise ValueError("Add at least one valid session string (STRING1–STRING4) in config.py")
+    mongo_client = AsyncIOMotorClient(
+        config.MONGO_URI,
+        serverSelectionTimeoutMS=10000
+    )
 
-    x_chat = parse_chat(config.X_CHAT)
-    mongo = AsyncIOMotorClient(config.MONGO_URI)
-    db = mongo[config.DB_NAME]
+    db = mongo_client[config.MONGO_DB_NAME]
+
+    # Verify MongoDB connection.
+    await mongo_client.admin.command("ping")
+
+    print("[MongoDB] Connected successfully.")
+
+    # =====================================
+    # USERBOT 1 CLIENT
+    # =====================================
+
+    client1 = TelegramClient(
+        StringSession(config.STRING_SESSION_1),
+        config.API_ID_1,
+        config.API_HASH_1
+    )
+
+    # =====================================
+    # USERBOT 2 CLIENT
+    # =====================================
+
+    client2 = TelegramClient(
+        StringSession(config.STRING_SESSION_2),
+        config.API_ID_2,
+        config.API_HASH_2
+    )
+
+    clients = [client1, client2]
 
     try:
-        results = await asyncio.gather(
-            *(
-                run_session(name, session, plugin, db, x_chat)
-                for name, session, plugin in sessions
-            ),
-            return_exceptions=True,
+        # Connect both clients.
+        await asyncio.gather(
+            *[
+                client.start()
+                for client in clients
+            ]
         )
-        failures = [result for result in results if isinstance(result, BaseException)]
-        for failure in failures:
-            log.error("A userbot session stopped with an error: %s", failure)
-        if failures:
-            raise RuntimeError(f"{len(failures)} userbot session(s) failed to start or stopped")
+
+        # Confirm account identities.
+        me1, me2 = await asyncio.gather(
+            client1.get_me(),
+            client2.get_me()
+        )
+
+        print(
+            f"[Userbot 1] Connected: "
+            f"@{me1.username or me1.id}"
+        )
+
+        print(
+            f"[Userbot 2] Connected: "
+            f"@{me2.username or me2.id}"
+        )
+
+        # Register plugin handlers.
+        userbot1.register(
+            client1,
+            db,
+            config.SUPPORT_CHAT_ID,
+            config.LOG_CHAT_ID
+        )
+
+        userbot2.register(
+            client2,
+            db,
+            config.SUPPORT_CHAT_ID,
+            config.LOG_CHAT_ID
+        )
+
+        print("[System] Both userbots are running.")
+
+        # Keep both clients running.
+        await asyncio.gather(
+            *[
+                client.run_until_disconnected()
+                for client in clients
+            ]
+        )
+
     finally:
-        mongo.close()
+        # Disconnect both clients and close MongoDB.
+        await asyncio.gather(
+            *[
+                client.disconnect()
+                for client in clients
+            ],
+            return_exceptions=True
+        )
+
+        mongo_client.close()
+
+        print("[System] All connections closed.")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        log.info("Shutdown requested")
+        print("\n[System] Stopped by user.")
