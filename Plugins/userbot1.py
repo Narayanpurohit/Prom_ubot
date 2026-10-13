@@ -5,7 +5,7 @@ from Plugins.function import (
     add_user_to_collection,
     process_users,
 )
-
+from Plugins.function import get_collection_counts
 
 # =====================================
 # USERBOT 1 SETTINGS
@@ -140,3 +140,29 @@ def register(client, db, support_chat_id, log_chat_id):
             )
 
     print("[Userbot 1] Handlers registered.")
+
+
+@client.on(events.NewMessage(
+        chats=support_chat_id,
+        pattern=r"^/stats(?:@\w+)?$"
+    ))
+    async def stats_handler(event):
+        try:
+            counts = await get_collection_counts(
+                collection1,
+                collection2
+            )
+
+            message = (
+                "📊 **Userbot Statistics**\n\n"
+                f"📁 Collection 1: `{counts['collection1']}` users\n"
+                f"📁 Collection 2: `{counts['collection2']}` users\n"
+                f"👥 Total: `{counts['collection1'] + counts['collection2']}` users"
+            )
+
+            await event.reply(message)
+
+        except Exception as error:
+            await event.reply(
+                f"❌ Stats fetch karte waqt error aaya: `{str(error)[:500]}`"
+            )
