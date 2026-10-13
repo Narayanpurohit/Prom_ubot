@@ -83,10 +83,7 @@ async def process_users(
     """
 
     # Send the configured process-start message.
-    await client.send_message(
-        log_chat_id,
-        p_msg
-    )
+    
 
     # Fetch one user ID from collection1.
     document = await collection1.find_one(
@@ -110,6 +107,10 @@ async def process_users(
 
     # Add to destination before removing from source.
     try:
+        await client.send_message(
+        user_id,
+        p_msg
+    )
         await collection2.update_one(
             {"_id": user_id},
             {"$setOnInsert": {"_id": user_id}},
