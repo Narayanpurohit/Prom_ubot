@@ -147,3 +147,12 @@ async def process_users(
     )
 
     await asyncio.sleep(delay_minutes * 60)
+
+async def get_collection_counts(collection1, collection2):
+    count1 = await collection1.count_documents({})
+    count2 = await collection2.count_documents({})
+
+    return {
+        "collection1": count1,
+        "collection2": count2
+    }
